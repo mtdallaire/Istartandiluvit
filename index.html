@@ -1,170 +1,190 @@
-
-<!DOCTYPE html>
-<html>
-    <head>
-        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-
-        <title>Babylon.js sample code</title>
-
-        <!-- Babylon.js -->
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.2/dat.gui.min.js"></script>
-        <script src="https://assets.babylonjs.com/generated/Assets.js"></script>
-        <script src="https://cdn.babylonjs.com/recast.js"></script>
-        <script src="https://cdn.babylonjs.com/ammo.js"></script>
-        <script src="https://cdn.babylonjs.com/havok/HavokPhysics_umd.js"></script>
-        <script src="https://cdn.babylonjs.com/cannon.js"></script>
-        <script src="https://cdn.babylonjs.com/Oimo.js"></script>
-        <script src="https://cdn.babylonjs.com/earcut.min.js"></script>
-        <script src="https://cdn.babylonjs.com/babylon.js"></script>
-        <script src="https://cdn.babylonjs.com/materialsLibrary/babylonjs.materials.min.js"></script>
-        <script src="https://cdn.babylonjs.com/proceduralTexturesLibrary/babylonjs.proceduralTextures.min.js"></script>
-        <script src="https://cdn.babylonjs.com/postProcessesLibrary/babylonjs.postProcess.min.js"></script>
-        <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
-        <script src="https://cdn.babylonjs.com/serializers/babylonjs.serializers.min.js"></script>
-        <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
-        <script src="https://cdn.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
-
-        <style>
-            html, body {
-                overflow: hidden;
-                width: 100%;
-                height: 100%;
-                margin: 0;
-                padding: 0;
-            }
-
-            #renderCanvas {
-                width: 100%;
-                height: 100%;
-                touch-action: none;
-            }
-            
-            #canvasZone {
-                width: 100%;
-                height: 100%;
-            }
-        </style>
-    </head>
-<body>
-    <div id="canvasZone"><canvas id="renderCanvas"></canvas></div>
-    <script>
-        var canvas = document.getElementById("renderCanvas");
-
-        var startRenderLoop = function (engine, canvas) {
-            engine.runRenderLoop(function () {
-                if (sceneToRender && sceneToRender.activeCamera) {
-                    sceneToRender.render();
-                }
-            });
-        }
-
-        var engine = null;
-        var scene = null;
-        var sceneToRender = null;
-        var createDefaultEngine = function() { return new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true,  disableWebGL2Support: false}); };
-        var avatar = null;
+var avatar = null;
+var idle;
 var forward = false;
 var backward = false;
+var idle = true;
 var left = false;
 var right = false;
 var rotateLeft = false;
 var rotateRight = false;
-var speed = 1; // Vitesse de déplacement de l'avatar
+var speed = 0.01; // Vitesse de déplacement de l'avatar
 var rotationSpeed = 0.1; // Vitesse de rotation, ajustable selon vos préférences
+var skeleton;
+var idleRange;
+var walkRange;
+var runRange;
+var leftRange;
+var rightRange;
+var lastpos=0;
+var lastpos2=0;
+var lastangle=0;
 
+var delayCreateScene = function () {
+    
+    engine.enableOfflineSupport = false;
 
-var createScene = function () {
+    // This is really important to tell Babylon.js to use decomposeLerp and matrix interpolation
+    BABYLON.Animation.AllowMatricesInterpolation = true;
+
     // This creates a basic Babylon Scene object (non-mesh)
     var scene = new BABYLON.Scene(engine);
 
-    var camera = new BABYLON.ArcRotateCamera("camera", BABYLON.Tools.ToRadians(90), BABYLON.Tools.ToRadians(65), 10, BABYLON.Vector3.Zero(), scene);
-    // This attaches the camera to the canvas
+    var camera = new BABYLON.ArcRotateCamera("camera1", Math.PI / 2, Math.PI / 4, 3, new BABYLON.Vector3(0, 1, 0), scene);
     camera.attachControl(canvas, true);
 
-    // This creates a light, aiming 0,1,0 - to the sky (non-mesh)
-    var light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+    camera.lowerRadiusLimit = 2;
+    camera.upperRadiusLimit = 10;
+    camera.wheelDeltaPercentage = 0.01;
 
-    // Default intensity is 1. Let's dim the light a small amount
-    light.intensity = 0.7;
+	var light = new BABYLON.HemisphericLight("light1", new BABYLON.Vector3(0, 1, 0), scene);
+	light.intensity = 0.6;
+	light.specular = BABYLON.Color3.Black();
 
+    var light2 = new BABYLON.DirectionalLight("dir01", new BABYLON.Vector3(0, -0.5, -1.0), scene);
+    light2.position = new BABYLON.Vector3(0, 5, 5);
+
+    // Shadows
+    var shadowGenerator = new BABYLON.ShadowGenerator(1024, light2);
+    shadowGenerator.useBlurExponentialShadowMap = true;
+    shadowGenerator.blurKernel = 32;
     
-    
-    // Our built-in 'ground' shape.
     var ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 6, height: 6}, scene);
     const groundMaterial = new BABYLON.StandardMaterial("Ground Material", scene);
     ground.material = groundMaterial;
     let groundTexture = new BABYLON.Texture(Assets.textures.checkerboard_basecolor_png.rootUrl, scene);
     groundMaterial.diffuseTexture = groundTexture;
 
-    BABYLON.SceneLoader.ImportMesh("", Assets.meshes.Yeti.rootUrl, Assets.meshes.Yeti.filename, scene, function(newMeshes){
-        newMeshes[0].scaling = new BABYLON.Vector3(0.1, 0.1, 0.1);
-        avatar=newMeshes[0];
-        avatar.rotation.x=0.25;
+    //BABYLON.SceneLoader.ImportMesh("", Assets.meshes.Yeti.rootUrl, Assets.meshes.Yeti.filename, scene, function(newMeshes){
+	BABYLON.SceneLoader.ImportMesh("", "./scenes/", "dummy3.babylon", scene, function (newMeshes, particleSystems, skeletons) {
+        skeleton = skeletons[0];
+        avatar = newMeshes;
+        shadowGenerator.addShadowCaster(scene.meshes[0], true);
+        for (var index = 0; index < newMeshes.length; index++) {
+            newMeshes[index].receiveShadows = false;
+        }
+
+        var helper = scene.createDefaultEnvironment({
+            enableGroundShadow: true
+        });
+        helper.setMainColor(BABYLON.Color3.Gray());
+        helper.ground.position.y += .01;
+
+        // ROBOT
+        skeleton.animationPropertiesOverride = new BABYLON.AnimationPropertiesOverride();
+        skeleton.animationPropertiesOverride.enableBlending = true;
+        skeleton.animationPropertiesOverride.blendingSpeed = 0.05;
+        skeleton.animationPropertiesOverride.loopMode = 1;
+
+        idleRange = skeleton.getAnimationRange("YBot_Idle");
+        walkRange = skeleton.getAnimationRange("YBot_Walk");
+        runRange = skeleton.getAnimationRange("YBot_Run");
+        leftRange = skeleton.getAnimationRange("YBot_LeftStrafeWalk");
+        rightRange = skeleton.getAnimationRange("YBot_RightStrafeWalk");
+        
+        // IDLE
+        idle = true;
+        if (idleRange) scene.beginAnimation(skeleton, idleRange.from, idleRange.to, true);
+        
+        let parent = new BABYLON.TransformNode();
+        parent.position = new BABYLON.Vector3(0, 0, 0);
+        for (var index = 0; index < newMeshes.length; index++) {
+            let house = newMeshes[index];
+            house.checkCollisions = true;
+            house.parent = parent;
+        }
+
     });
 
 
+    function moveSkeleton(direction) {
+        lastpos = lastpos + (speed * direction);
+        let parent = new BABYLON.TransformNode();
+        parent.position = new BABYLON.Vector3(lastpos2, 0, lastpos);
+        for (var index = 0; index < avatar.length; index++) {
+            let house = avatar[index];
+            house.checkCollisions = true;
+            house.parent = parent;
+        }
+    }
+
+    function moveSkeleton2(direction) {
+        lastpos2 = lastpos2 + (speed * direction);
+        let parent = new BABYLON.TransformNode();
+        parent.position = new BABYLON.Vector3(lastpos2, 0, lastpos);
+        for (var index = 0; index < avatar.length; index++) {
+            let house = avatar[index];
+            house.checkCollisions = true;
+            house.parent = parent;
+        }
+    }
+
+    function rotateSkeleton(direction) {
+        lastangle = lastangle + (speed * direction);
+        for (var index = 0; index < avatar.length; index++) {
+            avatar[index].addRotation(0, direction, 0);
+        }
+    }
+
+
     function updateAvatarPosition() {
-        var forwardDirection = avatar.getDirection(new BABYLON.Vector3(0, 0, 1)); // Direction avant (Z)
-        var rightDirection = avatar.getDirection(new BABYLON.Vector3(1, 0, 0)); // Direction droite (X)
+   //     var forwardDirection = skeleton.getDirection(new BABYLON.Vector3(0, 0, 1)); // Direction avant (Z)
+   //     var rightDirection = avatar.getDirection(new BABYLON.Vector3(1, 0, 0)); // Direction droite (X)
 
-        if (forward) {
-            avatar.position.addInPlace(forwardDirection.scale(speed));
-        }
-        if (backward) {
-            avatar.position.subtractInPlace(forwardDirection.scale(speed));
-        }
-        if (left) {
-            avatar.position.subtractInPlace(rightDirection.scale(speed));
-        }
-        if (right) {
-            avatar.position.addInPlace(rightDirection.scale(speed));
-        }
+//            if (runRange) scene.beginAnimation(skeleton, runRange.from, runRange.to, true);
 
+        if (forward || backward || left || right) {
+            if (forward) {
+                moveSkeleton1(1);
+            } else if (backward) {
+                moveSkeleton1(-1);
+            } 
+            if (left) {
+                moveSkeleton2(-1);
+            } else if (right) {
+                moveSkeleton2(1);
+            } 
+            if (idle == true) {
+                idle = false;
 
+                if (forward) {
+                    if (walkRange) scene.beginAnimation(skeleton, walkRange.from, walkRange.to, true);
+                }
+                if (backward) {
+                    if (walkRange) scene.beginAnimation(skeleton, walkRange.to, walkRange.from, true);
+                }
+                if (left) {
+                    if (leftRange) scene.beginAnimation(skeleton, leftRange.from, leftRange.to, true);
+                }
+                if (right) {
+                    if (rightRange) scene.beginAnimation(skeleton, rightRange.from, rightRange.to, true);
+                }
+            }
 
-     /*   var forwardDirection = avatar.forward; // Obtenez la direction avant de l'avatar
-
-        if (forward) {
-            // Déplacez l'avatar en avant selon sa direction
-            avatar.position.addInPlace(forwardDirection.scale(speed));
+        } else {
+            if (idle == false) {
+                idle = true;
+                if (idleRange) scene.beginAnimation(skeleton, idleRange.from, idleRange.to, true);
+            }
         }
-        if (backward) {
-            // Déplacez l'avatar en arrière (direction inverse)
-            avatar.position.subtractInPlace(forwardDirection.scale(speed));
-        }
-
-        if (forward) {
-            avatar.position.z += speed;
-        }
-        if (backward) {
-            avatar.position.z -= speed;
-        }
-        if (left) {
-            avatar.position.x -= speed;
-        }
-        if (right) {
-            avatar.position.x += speed;
-        }*/
     }
 
     // Fonction pour mettre à jour la rotation de l'avatar
     function updateAvatarRotation() {
         if (rotateLeft) {
-            avatar.addRotation(0, -rotationSpeed, 0); // Rotation à gauche
+           rotateSkeleton(rotationSpeed);
         }
         if (rotateRight) {
-            avatar.addRotation(0, rotationSpeed, 0); // Rotation à droite
+           rotateSkeleton(-rotationSpeed);
         }
     }
 
     // Boucle de rendu
     scene.registerBeforeRender(function() {
-        if (avatar) {
+        if (skeleton) {
             updateAvatarPosition();
             updateAvatarRotation();
         }
     });
-
 
     return scene;
 };
@@ -193,30 +213,5 @@ window.addEventListener("keyup", function(event) {
     }
 });
 
-                window.initFunction = async function() {
-                    
-                    
-                    
-                    var asyncEngineCreation = async function() {
-                        try {
-                        return createDefaultEngine();
-                        } catch(e) {
-                        console.log("the available createEngine function failed. Creating the default engine instead");
-                        return createDefaultEngine();
-                        }
-                    }
 
-                    window.engine = await asyncEngineCreation();
-        if (!engine) throw 'engine should not be null.';
-        startRenderLoop(engine, canvas);
-        window.scene = createScene();};
-        initFunction().then(() => {sceneToRender = scene                    
-        });
 
-        // Resize
-        window.addEventListener("resize", function () {
-            engine.resize();
-        });
-    </script>
-</body>
-</html>
